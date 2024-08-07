@@ -11,13 +11,153 @@ import logging
 import pandas as pd
 import time
 from datetime import datetime
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import f1_score
 
-# Comment this lines if you have problems with MLFlow installation
+import torch
+import tqdm
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader
+
+from copy import deepcopy
+
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.base import BaseEstimator, TransformerMixin
+
+import warnings
+warnings.filterwarnings('ignore')
+
 import mlflow
 mlflow.autolog()
+
+# Used classes and functions
+# Tensor Transformer
+class TensorTransformer(BaseEstimator, TransformerMixin):
+  def fit(self, X):
+    return self
+  def transform(self, X):
+    X_tensor = torch.tensor(X, dtype=torch.float32)
+    return X_tensor
+
+prep = Pipeline([
+    ('scaler', StandardScaler()),
+    ('tensor', TensorTransformer())
+])
+
+class IrisNetwork(nn.Module):
+  def __init__(self, n_layers, sub):
+    super().__init__()
+    self.n_layers = n_layers
+    self.sub = sub
+    self.layers = []
+    self.activation = []
+    start = 4
+    out = 0
+    for i in range(1, self.n_layers+1):
+      out = start - self.sub
+      if i < n_layers:
+        self.layers.append(nn.Linear(start, out))
+        self.activation.append(nn.ReLU())
+        self.add_module(f"layer{i}", self.layers[-1])
+        self.add_module(f"act{i}", self.activation[-1])
+        start = out
+      else:
+        self.layers.append(nn.Linear(start, 3))
+        self.activation.append(nn.Softmax(dim = 1))
+        self.add_module(f"layer{i}", self.layers[-1])
+        self.add_module(f"act{i}", self.activation[-1])
+
+  def forward(self, x):
+    for i in range(0, self.n_layers):
+      x = self.layers[i](x)
+      x = self.activation[i](x)
+    return x
+
+def test_model(model, batch, test):
+  test_loader = DataLoader(test, batch_size = batch, shuffle = True)
+  test_loss = 0
+  test_acc = 0
+  loss_fn = nn.CrossEntropyLoss()
+  model.eval()
+  with torch.no_grad():
+      for batch in test_loader:
+          x = batch[:,:-1]
+          y = batch[:,-1].reshape(-1,1)
+          out = model(x)
+          loss = loss_fn(out, y)
+          test_loss += loss.item()
+          pred = torch.argmax(out, 1).detach().numpy()
+          test_acc += accuracy_score(y, pred)
+
+
+  test_loss /= len(test_loader)
+  test_acc /= len(test_loader)
+  return test_loss, test_acc
+
+
+
+def train_model(model, n_epochs, batch_size, lr, train, val):
+  train_loader = DataLoader(train, batch_size = batch_size, shuffle = True)
+  loss_fn = nn.CrossEntropyLoss()
+  optimizer = optim.Adam(model.parameters(), lr=lr)
+  best_score = 0.0
+  for epoch in range(n_epochs):
+      for batch in train_loader:
+          Xbatch = batch[:,:-1]
+          ybatch = batch[:,-1].reshape(-1,1)
+          y_pred = model(Xbatch)
+          loss = loss_fn(y_pred, ybatch)
+          optimizer.zero_grad()
+          loss.backward()
+          optimizer.step()
+
+      _, score = test_model(model, batch_size, val)
+      if best_score < score:
+          best_score = score
+          best_model = deepcopy(model)
+
+  return best_model
+
+# UPDATE Z MLFLOW 
+
+# zapisać model wytrenowany w kontenerze, a potem na lokalnym dysku
+# dodać logi: czas treningu, accuracy po każdym treningu, rozmiar zbioru i batch size przed treningiem
+
+# Main execution ------------------------------------------------------------------------------------
+
+# Import training datasets
+
+X = pd.read_csv('./data_process/train.csv')
+y = pd.read_csv('./data_process/ytrain.csv')
+
+# Train-validation split
+
+X_train, X_val, y_train, y_val = train_test_split(X, y, test_size = 0.25, shuffle = True)
+
+X_train = prep.fit_transform(X_train)
+X_val = prep.fit_transform(X_val)
+
+y_train = torch.tensor(y_train.to_numpy(), dtype=torch.float32).reshape(-1, 1)
+y_val = torch.tensor(y_val.to_numpy(), dtype=torch.float32).reshape(-1, 1)
+
+training = torch.cat((X_train,y_train), 1)
+validation = torch.cat((X_val,y_val), 1)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Adds the root directory to system path
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
