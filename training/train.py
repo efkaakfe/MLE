@@ -1,16 +1,8 @@
-"""
-This script prepares the data, runs the training, and saves the model.
-"""
 
-import argparse
 import os
-import sys
-import pickle
-import json
 import logging
 import pandas as pd
 import time
-from datetime import datetime
 
 import joblib
 
@@ -34,6 +26,19 @@ warnings.filterwarnings('ignore')
 
 import mlflow
 mlflow.autolog()
+
+# Logging 
+logging.basicConfig(level=logging.INFO, 
+                        format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Setting the seed for reproductibility
+seed = 42
+torch.manual_seed(seed)
+torch.cuda.manual_seed(seed)
+
+# Create logger
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 
 class TensorTransformer(BaseEstimator, TransformerMixin):
@@ -86,7 +91,8 @@ def test_model(model, batch, test):
   with torch.no_grad():
       for batch in test_loader:
           x = batch[:,:-1]
-          y = batch[:,-1].reshape(-1,1)
+          y = batch[:,-1]
+          y = y.type(torch.LongTensor)
           out = model(x)
           loss = loss_fn(out, y)
           test_loss += loss.item()
@@ -110,7 +116,8 @@ def train_model(model, n_epochs, batch_size, lr, train, val):
   for epoch in range(n_epochs):
       for batch in train_loader:
           Xbatch = batch[:,:-1]
-          ybatch = batch[:,-1].reshape(-1,1)
+          ybatch = batch[:,-1]
+          ybatch = ybatch.type(torch.LongTensor)
           y_pred = model(Xbatch)
           loss = loss_fn(y_pred, ybatch)
           optimizer.zero_grad()
@@ -125,15 +132,17 @@ def train_model(model, n_epochs, batch_size, lr, train, val):
   return best_model, best_score
 
 def save_model(model, batch):
+    logging.info('Saving the model')
     os.mkdir('./model')
-    joblib.dump(model, './model/model.joblib')
-    df = pd.DataFrame({'batch_size': batch
-                       }, 
-                       index = [0])
-    df.to_csv('./model/batch_size.csv')
-
-# UPDATE Z MLFLOW 
-
+    mpath = os.path.join(os.getcwd(),'model','model.pt')
+    bpath = os.path.join(os.getcwd(),'model','batch_size.txt')
+    torch.save(model, mpath)
+    logging.info('Model saved in ', mpath)
+    with open(bpath,'w') as f:
+       f.write(str(batch))
+       f.close
+    logging.info('Batch size saved in ', bpath)
+    
 # Tuning  machine
 def tuning_machine(epochs, batch, lr, n_layers, sub, train, val):
 
@@ -146,11 +155,11 @@ def tuning_machine(epochs, batch, lr, n_layers, sub, train, val):
                 'layers': l,
                 'sub': s
             })
-        a = [4]
-        for n in range(1, l):
-            a.append(4-n*s)
-        a.append(3)
-        nns.append(a)
+            a = [4]
+            for n in range(1, l):
+              a.append(4-n*s)
+            a.append(3)
+            nns.append(a)
 
     params = [par[i] for i in range(len(nns)) if min(nns[i])>0]
 
@@ -161,11 +170,13 @@ def tuning_machine(epochs, batch, lr, n_layers, sub, train, val):
     # Tuning machine
     best_score = 0
 
+    tune_start = time.time()
+
     for p in params:
         for x in params2:
 
             logging.info('Testing model:') 
-            logging.info(f'{p['layers']} layers')
+            logging.info(p['layers'], 'layers')
             logging.info(f'{x[0]} epochs')
             logging.info(f'{x[1]} batch size')
             logging.info(f'{x[2]} learning rate')
@@ -186,8 +197,9 @@ def tuning_machine(epochs, batch, lr, n_layers, sub, train, val):
             best = deepcopy(m2)
             best_batch = x[1]
 
+    tune_stop = time.time()
+    logging.info('Time of working machine: ', tune_start - tune_stop)
     logging.info('Best accuracy: ', best_score)
-
     save_model(best, best_batch)
 
 
@@ -199,11 +211,19 @@ def main():
     n_layers = [3, 4, 5]
     sub = [-2, -1, 0, 1, 2]
 
+    logging.info('Importing datasets')
     # Import training datasets
+    try: 
+      X = pd.read_csv('./data_process/train.csv')
+    except FileNotFoundError:
+      print('No data file')
 
-    X = pd.read_csv('./data_process/train.csv')
-    y = pd.read_csv('./data_process/ytrain.csv')
-
+    try: 
+      y = pd.read_csv('./data_process/ytrain.csv')
+    except FileNotFoundError:
+      print('No data file')
+    
+    logging.info('Creating train and validation sets')
     # Train-validation split
 
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size = 0.25, shuffle = True)
@@ -218,7 +238,7 @@ def main():
     validation = torch.cat((X_val,y_val), 1)
 
     # Tune network
-
+    logging.info('Tuning machine starts')
     tuning_machine(epochs, batch, lr, n_layers, sub, training, validation)
 
 
