@@ -10,7 +10,7 @@ FROM python:3.12
 WORKDIR /app
 
 # Copy data folder to Docker
-#COPY data/ /app/data
+COPY data_process/ /app/data
 
 # Copy the code itself
 COPY training /app/training
@@ -20,8 +20,8 @@ COPY training /app/training
 #COPY ${CONF_PATH} /app
 
 # Install any necessary packages listed in requirements.txt
-#COPY requirements.txt ./
-#RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Train the model
 RUN python3  training/train.py

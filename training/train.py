@@ -12,8 +12,11 @@ import pandas as pd
 import time
 from datetime import datetime
 
+import joblib
+
+import itertools
+
 import torch
-import tqdm
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
@@ -32,8 +35,7 @@ warnings.filterwarnings('ignore')
 import mlflow
 mlflow.autolog()
 
-# Used classes and functions
-# Tensor Transformer
+
 class TensorTransformer(BaseEstimator, TransformerMixin):
   def fit(self, X):
     return self
@@ -99,10 +101,12 @@ def test_model(model, batch, test):
 
 
 def train_model(model, n_epochs, batch_size, lr, train, val):
+  
   train_loader = DataLoader(train, batch_size = batch_size, shuffle = True)
   loss_fn = nn.CrossEntropyLoss()
   optimizer = optim.Adam(model.parameters(), lr=lr)
   best_score = 0.0
+
   for epoch in range(n_epochs):
       for batch in train_loader:
           Xbatch = batch[:,:-1]
@@ -118,151 +122,104 @@ def train_model(model, n_epochs, batch_size, lr, train, val):
           best_score = score
           best_model = deepcopy(model)
 
-  return best_model
+  return best_model, best_score
+
+def save_model(model, batch):
+    os.mkdir('./model')
+    joblib.dump(model, './model/model.joblib')
+    df = pd.DataFrame({'batch_size': batch
+                       }, 
+                       index = [0])
+    df.to_csv('./model/batch_size.csv')
 
 # UPDATE Z MLFLOW 
 
-# zapisać model wytrenowany w kontenerze, a potem na lokalnym dysku
-# dodać logi: czas treningu, accuracy po każdym treningu, rozmiar zbioru i batch size przed treningiem
+# Tuning  machine
+def tuning_machine(epochs, batch, lr, n_layers, sub, train, val):
 
-# Main execution ------------------------------------------------------------------------------------
+    # Network complexity parameters
+    par = []
+    nns = []
+    for l in n_layers:
+        for s in sub:
+            par.append({
+                'layers': l,
+                'sub': s
+            })
+        a = [4]
+        for n in range(1, l):
+            a.append(4-n*s)
+        a.append(3)
+        nns.append(a)
 
-# Import training datasets
+    params = [par[i] for i in range(len(nns)) if min(nns[i])>0]
 
-X = pd.read_csv('./data_process/train.csv')
-y = pd.read_csv('./data_process/ytrain.csv')
+    # Network training parameters
+    params2 = itertools.product(epochs, batch, lr)
+    params2 = [list(x) for x in params2]
 
-# Train-validation split
+    # Tuning machine
+    best_score = 0
 
-X_train, X_val, y_train, y_val = train_test_split(X, y, test_size = 0.25, shuffle = True)
+    for p in params:
+        for x in params2:
 
-X_train = prep.fit_transform(X_train)
-X_val = prep.fit_transform(X_val)
+            logging.info('Testing model:') 
+            logging.info(f'{p['layers']} layers')
+            logging.info(f'{x[0]} epochs')
+            logging.info(f'{x[1]} batch size')
+            logging.info(f'{x[2]} learning rate')
+            logging.info(f'{train.shape[0]} train size')
+            logging.info(f'{val.shape[0]} validation size')
 
-y_train = torch.tensor(y_train.to_numpy(), dtype=torch.float32).reshape(-1, 1)
-y_val = torch.tensor(y_val.to_numpy(), dtype=torch.float32).reshape(-1, 1)
+            m1 = IrisNetwork(p['layers'], p['sub'])
 
-training = torch.cat((X_train,y_train), 1)
-validation = torch.cat((X_val,y_val), 1)
+            s = time.time()
+            m2, val_score = train_model(m1, x[0],x[1],x[2], train, val)
+            e = time.time()
 
+            logging.info(f'Testing finished in {e-s} seconds')
+            logging.info('Validation score: ', val_score)
 
+        if val_score > best_score:
+            best_score = val_score
+            best = deepcopy(m2)
+            best_batch = x[1]
 
+    logging.info('Best accuracy: ', best_score)
 
-
-
-
-
-
-
-
-
-
-
-
-# Adds the root directory to system path
-ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.dirname(ROOT_DIR))
-
-# Change to CONF_FILE = "settings.json" if you have problems with env variables
-CONF_FILE = os.getenv('CONF_PATH') 
-
-from utils import get_project_dir, configure_logging
-
-# Loads configuration settings from JSON
-with open(CONF_FILE, "r") as file:
-    conf = json.load(file)
-
-# Defines paths
-DATA_DIR = get_project_dir(conf['general']['data_dir'])
-MODEL_DIR = get_project_dir(conf['general']['models_dir'])
-TRAIN_PATH = os.path.join(DATA_DIR, conf['train']['table_name'])
-
-# Initializes parser for command line arguments
-parser = argparse.ArgumentParser()
-parser.add_argument("--train_file", 
-                    help="Specify inference data file", 
-                    default=conf['train']['table_name'])
-parser.add_argument("--model_path", 
-                    help="Specify the path for the output model")
-
-
-class DataProcessor():
-    def __init__(self) -> None:
-        pass
-
-    def prepare_data(self, max_rows: int = None) -> pd.DataFrame:
-        logging.info("Preparing data for training...")
-        df = self.data_extraction(TRAIN_PATH)
-        df = self.data_rand_sampling(df, max_rows)
-        return df
-
-    def data_extraction(self, path: str) -> pd.DataFrame:
-        logging.info(f"Loading data from {path}...")
-        return pd.read_csv(path)
-    
-    def data_rand_sampling(self, df: pd.DataFrame, max_rows: int) -> pd.DataFrame:
-        if not max_rows or max_rows < 0:
-            logging.info('Max_rows not defined. Skipping sampling.')
-        elif len(df) < max_rows:
-            logging.info('Size of dataframe is less than max_rows. Skipping sampling.')
-        else:
-            df = df.sample(n=max_rows, replace=False, random_state=conf['general']['random_state'])
-            logging.info(f'Random sampling performed. Sample size: {max_rows}')
-        return df
-
-
-class Training():
-    def __init__(self) -> None:
-        self.model = DecisionTreeClassifier(random_state=conf['general']['random_state'])
-
-    def run_training(self, df: pd.DataFrame, out_path: str = None, test_size: float = 0.33) -> None:
-        logging.info("Running training...")
-        X_train, X_test, y_train, y_test = self.data_split(df, test_size=test_size)
-        start_time = time.time()
-        self.train(X_train, y_train)
-        end_time = time.time()
-        logging.info(f"Training completed in {end_time - start_time} seconds.")
-        self.test(X_test, y_test)
-        self.save(out_path)
-
-    def data_split(self, df: pd.DataFrame, test_size: float = 0.33) -> tuple:
-        logging.info("Splitting data into training and test sets...")
-        return train_test_split(df[['x1','x2']], df['y'], test_size=test_size, 
-                                random_state=conf['general']['random_state'])
-    
-    def train(self, X_train: pd.DataFrame, y_train: pd.DataFrame) -> None:
-        logging.info("Training the model...")
-        self.model.fit(X_train, y_train)
-
-    def test(self, X_test: pd.DataFrame, y_test: pd.DataFrame) -> float:
-        logging.info("Testing the model...")
-        y_pred = self.model.predict(X_test)
-        res = f1_score(y_test, y_pred)
-        logging.info(f"f1_score: {res}")
-        return res
-
-    def save(self, path: str) -> None:
-        logging.info("Saving the model...")
-        if not os.path.exists(MODEL_DIR):
-            os.makedirs(MODEL_DIR)
-
-        if not path:
-            path = os.path.join(MODEL_DIR, datetime.now().strftime(conf['general']['datetime_format']) + '.pickle')
-        else:
-            path = os.path.join(MODEL_DIR, path)
-
-        with open(path, 'wb') as f:
-            pickle.dump(self.model, f)
+    save_model(best, best_batch)
 
 
 def main():
-    configure_logging()
 
-    data_proc = DataProcessor()
-    tr = Training()
+    lr = [0.001, 0.01, 0.015]
+    epochs = [20, 35, 50]
+    batch = [6, 10, 15]
+    n_layers = [3, 4, 5]
+    sub = [-2, -1, 0, 1, 2]
 
-    df = data_proc.prepare_data(max_rows=conf['train']['data_sample'])
-    tr.run_training(df, test_size=conf['train']['test_size'])
+    # Import training datasets
+
+    X = pd.read_csv('./data_process/train.csv')
+    y = pd.read_csv('./data_process/ytrain.csv')
+
+    # Train-validation split
+
+    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size = 0.25, shuffle = True)
+
+    X_train = prep.fit_transform(X_train)
+    X_val = prep.fit_transform(X_val)
+
+    y_train = torch.tensor(y_train.to_numpy(), dtype=torch.float32).reshape(-1, 1)
+    y_val = torch.tensor(y_val.to_numpy(), dtype=torch.float32).reshape(-1, 1)
+
+    training = torch.cat((X_train,y_train), 1)
+    validation = torch.cat((X_val,y_val), 1)
+
+    # Tune network
+
+    tuning_machine(epochs, batch, lr, n_layers, sub, training, validation)
 
 
 if __name__ == "__main__":

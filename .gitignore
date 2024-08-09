@@ -4,12 +4,9 @@ __pycache__/
 .vscode
 
 # Directories
-models/
-results/
-mlruns/
+model/
 
 # File Extensions
-*.pickle
 *.pyc
 *.temp
 
