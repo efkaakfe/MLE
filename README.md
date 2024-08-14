@@ -1,93 +1,53 @@
-# ML_basic_example
-Welcome to the `ML_basic_example` project. It is an ideal template for starting a well-structured Machine Learning project. The goal of this project is to make the deployment of ML models straightforward, efficient, and maintainable. The project has been set up to handle each aspect of the ML pipeline from data processing, training models, and inferencing on new data. In order to use this project template, you'll first need to create a GitHub account if you don't have one already. It's a simple process that takes just a few minutes. Go to [GitHub's homepage](https://github.com), click 'Sign up', and follow the prompts to set up your new account. Get ready to step into the world of efficient Machine Learning project structuring!
-
-## Prerequisites
-
-Before diving into the detailed steps of setting up and using this project, there are few important prerequisites or requirements that need to be addressed. These prerequisites ensure that your local development environment is ready and capable of efficiently running and supporting the project. 
-Remember, if you encounter problems installing Docker Desktop or MLFlow, you may skip these steps, modify your code and work directly on your local machine using Python and Git.
-
-### Forking and Cloning from GitHub
-To start using this project, you first need to create a copy on your own GitHub account by 'forking' it. On the main page of the `ML_basic_example` project, click on the 'Fork' button at the top right corner. This will create a copy of the project under your own account. You can then 'clone' it to your local machine for personal use. To do this, click the 'Code' button on your forked repository, copy the provided link, and use the `git clone` command in your terminal followed by the copied link. This will create a local copy of the repository on your machine, and you're ready to start!
-
-### Setting Up Development Environment
-Next, you need to set up a suitable Integrated Development Environment (IDE). Visual Studio Code (VSCode) is a great tool for this. You can download it from the official website (https://code.visualstudio.com/Download). After installing VSCode, open it and navigate to the `File` menu and click `Add Folder to Workspace`. Navigate to the directory where you cloned the forked repository and add it. VSCode supports a wide range of programming languages with features like syntax highlighting, code completion, and debugging configurations. You can now edit the files, navigate through your project, and start contributing to `ML_basic_example`. For running scripts, open a new terminal in VSCode by selecting `Terminal -> New Terminal`. Now you can execute your Python scripts directly in the terminal.
-
-### Installing Docker Desktop
-
-Installing Docker Desktop is a straightforward process. Head over to the Docker official website's download page ([Docker Download Page](https://www.docker.com/products/docker-desktop)), and select the version for your operating system - Docker Desktop is available for both Windows and Mac. After downloading the installer, run it, and follow the on-screen instructions. 
-
-Once the installation is completed, you can open Docker Desktop to confirm it's running correctly. It will typically show up in your applications or programs list. After launching, Docker Desktop will be idle until you run Docker commands. This application effectively wraps the Docker command line and simplifies many operations for you, making it easier to manage containers, images, and networks directly from your desktop. 
-
-Keep in mind that Docker requires you to have virtualization enabled in your system's BIOS settings. If you encounter issues, please verify your virtualization settings, or refer to Docker's installation troubleshooting guide. Now you're prepared to work with Dockerized applications!
-
-### Installing MLFlow on Windows
-
-MLFlow can be easily installed on a Windows local machine using the pip, the Python package installer. To do so, open the command prompt (you can find it by searching for `cmd` in the Start menu) and type the following command:
-
-```python
-pip install mlflow
-```
-
-After the successful installation, you can start managing and deploying your ML models with MLFlow. For further information on how to use MLFlow at its best, refer to the official MLFlow documentation or use the `mlflow --help` command.
-
-Should you encounter any issues during the installation, you can bypass them by commenting out the corresponding lines in the `train.py` and `requirements.txt` files.
-
-To run MLFlow, type `mlflow ui` in your terminal and press enter. If it doesn't work, you may also try `python -m mlflow ui`  This will start the MLFlow tracking UI, typically running on your localhost at port 5000. You can then access the tracking UI by opening your web browser and navigating to `http://localhost:5000`.
-
+# Machine Learning Enginnering project
+The aim of the project is to train and test neural network for multiclass classification using Docker containers. For this purpose, Pytorch was used as the main tool for building network.
 
 ## Project structure:
 
-This project has a modular structure, where each folder has a specific duty.
+Below is the structure of the project:
 
 ```
-MLE_basic_example
-├── data                      # Data files used for training and inference (it can be generated with data_generation.py script)
-│   ├── xor_inference_data.csv
-│   └── xor_train_data.csv
-├── data_process              # Scripts used for data processing and generation
+MLE
+├── data_process              # Scripts used for data processing and generation, generated .csv data files
 │   ├── data_generation.py
-│   └── __init__.py           
+│   └── __init__.py   
+|   |__train.csv
+|   |__ytrain.csv
+|   |__test.csv
+|   |__ytest.csv        
 ├── inference                 # Scripts and Dockerfiles used for inference
 │   ├── Dockerfile
 │   ├── run.py
 │   └── __init__.py
-├── models                    # Folder where trained models are stored
-│   └── various model files
 ├── training                  # Scripts and Dockerfiles used for training
 │   ├── Dockerfile
 │   ├── train.py
 │   └── __init__.py
-├── utils.py                  # Utility functions and classes that are used in scripts
-├── settings.json             # All configurable parameters and settings
+├── requirements.txt          # Requirements for running scripts
 └── README.md
+|__.gitignore                 # .gitignore file
 ```
 
-## Settings:
-The configurations for the project are managed using the `settings.json` file. It stores important variables that control the behaviour of the project. Examples could be the path to certain resource files, constant values, hyperparameters for an ML model, or specific settings for different environments. Before running the project, ensure that all the paths and parameters in `settings.json` are correctly defined.
-Keep in mind that you may need to pass the path to your config to the scripts. For this, you may create a .env file or manually initialize an environment variable as `CONF_PATH=settings.json`.
-Please note, some IDEs, including VSCode, may have problems detecting environment variables defined in the .env file. This is usually due to the extension handling the .env file. If you're having problems, try to run your scripts in a debug mode, or, as a workaround, you can hardcode necessary parameters directly into your scripts. Make sure not to expose sensitive data if your code is going to be shared or public. In such cases, consider using secret management tools provided by your environment.
-
 ## Data:
-Data is the cornerstone of any Machine Learning project. For generating the data, use the script located at `data_process/data_generation.py`. The generated data is used to train the model and to test the inference. Following the approach of separating concerns, the responsibility of data generation lies with this script.
+This project was built on iris dataset uploaded from Wikipedia website. For uploading the data, use the script located at `data_process/data_pull.py`. This script pulls data from the website, divides it to fours datasets: train/ytrain/test/ytest and saves in the same folder.
 
 ## Training:
-The training phase of the ML pipeline includes preprocessing of data, the actual training of the model, and the evaluation and validation of the model's performance. All of these steps are performed by the script `training/train.py`.
+The training part includes data preprocessing, training different networks and evaluation on validation set. The validation set was created by applying train_test_split on train/ytrain datasets. Final model with the highest validation score is saved in the container. All of these steps are performed by the script `training/train.py`.
 
 1. To train the model using Docker: 
 
-- Build the training Docker image. If the built is successfully done, it will automatically train the model:
+- Build the training Docker image:
 ```bash
-docker build -f ./training/Dockerfile --build-arg settings_name=settings.json -t training_image .
+docker build -f ./training/Dockerfile -t train_img .
 ```
-- You may run the container with the following parameters to ensure that the trained model is here:
+NOTE: Sometimes image cannot be built at once. If it happens, please run the command again.
+- Run the container:
 ```bash
-docker run -it training_image /bin/bash
+docker run --name train_c -t train_img 
 ```
-Then, move the trained model from the directory inside the Docker container `/app/models` to the local machine using:
+Move the trained model from the directory inside the Docker container `/app/model` to the local machine using:
 ```bash
-docker cp <container_id>:/app/models/<model_name>.pickle ./models
+docker cp train_c:/app/model ./model
 ```
-Replace `<container_id>` with your running Docker container ID and `<model_name>.pickle` with your model's name.
 
 1. Alternatively, the `train.py` script can also be run locally as follows:
 
@@ -96,31 +56,25 @@ python3 training/train.py
 ```
 
 ## Inference:
-Once a model has been trained, it can be used to make predictions on new data in the inference stage. The inference stage is implemented in `inference/run.py`.
+The inference stage is implemented in `inference/run.py`. The script uses model saved in training stage for batch inference on test set. The output is new file with actual and predicted labels.
 
 1. To run the inference using Docker, use the following commands:
 
 - Build the inference Docker image:
 ```bash
-docker build -f ./inference/Dockerfile --build-arg model_name=<model_name>.pickle --build-arg settings_name=settings.json -t inference_image .
+docker build -f ./inference/Dockerfile -t inf_img .
 ```
 - Run the inference Docker container:
 ```bash
-docker run -v /path_to_your_local_model_directory:/app/models -v /path_to_your_input_folder:/app/input -v /path_to_your_output_folder:/app/output inference_image
+docker run --name infer_c -t inf_img
 ```
-- Or you may run it with the attached terminal using the following command:
+- Copy results file into local storage:
 ```bash
-docker run -it inference_image /bin/bash  
+docker cp infer_c:/app/results ./results 
 ```
-After that ensure that you have your results in the `results` directory in your inference container.
 
 2. Alternatively, you can also run the inference script locally:
 
 ```bash
 python inference/run.py
 ```
-
-Replace `/path_to_your_local_model_directory`, `/path_to_your_input_folder`, and `/path_to_your_output_folder` with actual paths on your local machine or network where your models, input, and output are stored.
-
-## Wrap Up
-This project illustrates a simple, yet effective template to organize an ML project. Following good practices and principles, it ensures a smooth transition from model development to deployment.

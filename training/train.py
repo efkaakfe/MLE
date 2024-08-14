@@ -3,18 +3,13 @@ import os
 import logging
 import pandas as pd
 import time
-
-import joblib
-
+import sys
 import itertools
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-
 from copy import deepcopy
-
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
@@ -23,9 +18,6 @@ from sklearn.base import BaseEstimator, TransformerMixin
 
 import warnings
 warnings.filterwarnings('ignore')
-
-import mlflow
-mlflow.autolog()
 
 # Logging 
 logging.basicConfig(level=logging.INFO, 
@@ -36,23 +28,24 @@ seed = 42
 torch.manual_seed(seed)
 torch.cuda.manual_seed(seed)
 
-# Create logger
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-
-
+# Custom transformer
 class TensorTransformer(BaseEstimator, TransformerMixin):
   def fit(self, X):
     return self
   def transform(self, X):
     X_tensor = torch.tensor(X, dtype=torch.float32)
     return X_tensor
+  
+# Preprocessing pipeline
+def preprocessing(data):
+  prep = Pipeline([
+      ('scaler', StandardScaler()),
+      ('tensor', TensorTransformer())
+    ])
+  data = prep.fit_transform(data)
+  return data
 
-prep = Pipeline([
-    ('scaler', StandardScaler()),
-    ('tensor', TensorTransformer())
-])
-
+# Network class
 class IrisNetwork(nn.Module):
   def __init__(self, n_layers, sub):
     super().__init__()
@@ -81,12 +74,15 @@ class IrisNetwork(nn.Module):
       x = self.layers[i](x)
       x = self.activation[i](x)
     return x
-
+  
+# Test model loop
 def test_model(model, batch, test):
   test_loader = DataLoader(test, batch_size = batch, shuffle = True)
   test_loss = 0
   test_acc = 0
   loss_fn = nn.CrossEntropyLoss()
+  correct = 0
+  l = 0
   model.eval()
   with torch.no_grad():
       for batch in test_loader:
@@ -97,15 +93,16 @@ def test_model(model, batch, test):
           loss = loss_fn(out, y)
           test_loss += loss.item()
           pred = torch.argmax(out, 1).detach().numpy()
-          test_acc += accuracy_score(y, pred)
+          correct += (y.detach().numpy()==pred).sum().item()
+          l += batch.shape[0]
 
 
-  test_loss /= len(test_loader)
-  test_acc /= len(test_loader)
+  test_loss /= l
+  test_acc = correct / l
   return test_loss, test_acc
 
 
-
+# Train model loop
 def train_model(model, n_epochs, batch_size, lr, train, val):
   
   train_loader = DataLoader(train, batch_size = batch_size, shuffle = True)
@@ -131,19 +128,21 @@ def train_model(model, n_epochs, batch_size, lr, train, val):
 
   return best_model, best_score
 
+# Saving model 
 def save_model(model, batch):
     logging.info('Saving the model')
-    os.mkdir('./model')
+    if not os.path.isdir('model'): 
+       os.mkdir('./model')
     mpath = os.path.join(os.getcwd(),'model','model.pt')
     bpath = os.path.join(os.getcwd(),'model','batch_size.txt')
     torch.save(model, mpath)
-    logging.info('Model saved in ', mpath)
+    logging.info(f'Model saved in {mpath}')
     with open(bpath,'w') as f:
        f.write(str(batch))
        f.close
-    logging.info('Batch size saved in ', bpath)
-    
-# Tuning  machine
+    logging.info(f'Batch size saved in {bpath}')
+
+# Tuning machine
 def tuning_machine(epochs, batch, lr, n_layers, sub, train, val):
 
     # Network complexity parameters
@@ -175,13 +174,13 @@ def tuning_machine(epochs, batch, lr, n_layers, sub, train, val):
     for p in params:
         for x in params2:
 
-            logging.info('Testing model:') 
-            logging.info(p['layers'], 'layers')
-            logging.info(f'{x[0]} epochs')
-            logging.info(f'{x[1]} batch size')
-            logging.info(f'{x[2]} learning rate')
-            logging.info(f'{train.shape[0]} train size')
-            logging.info(f'{val.shape[0]} validation size')
+            logging.info(f"""Training model with: 
+                         {p['layers']} layers
+                         {x[0]} epochs
+                         {x[1]} batch size
+                         {x[2]} learning rate 
+                         {train.shape[0]} train size 
+                         {val.shape[0]} validation size""") 
 
             m1 = IrisNetwork(p['layers'], p['sub'])
 
@@ -190,7 +189,7 @@ def tuning_machine(epochs, batch, lr, n_layers, sub, train, val):
             e = time.time()
 
             logging.info(f'Testing finished in {e-s} seconds')
-            logging.info('Validation score: ', val_score)
+            logging.info(f'Validation score: {val_score}')
 
         if val_score > best_score:
             best_score = val_score
@@ -198,8 +197,8 @@ def tuning_machine(epochs, batch, lr, n_layers, sub, train, val):
             best_batch = x[1]
 
     tune_stop = time.time()
-    logging.info('Time of working machine: ', tune_start - tune_stop)
-    logging.info('Best accuracy: ', best_score)
+    logging.info(f'Time of working machine: {tune_stop - tune_start} seconds')
+    logging.info(f'Best accuracy: {best_score}')
     save_model(best, best_batch)
 
 
@@ -212,24 +211,27 @@ def main():
     sub = [-2, -1, 0, 1, 2]
 
     logging.info('Importing datasets')
+
     # Import training datasets
     try: 
       X = pd.read_csv('./data_process/train.csv')
     except FileNotFoundError:
-      print('No data file')
+      logging.info('No data file')
+      sys.exit(1)
 
     try: 
       y = pd.read_csv('./data_process/ytrain.csv')
     except FileNotFoundError:
-      print('No data file')
+      logging.info('No data file')
+      sys.exit(1)
     
     logging.info('Creating train and validation sets')
-    # Train-validation split
 
+    # Train-validation split and preprocessing
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size = 0.25, shuffle = True)
 
-    X_train = prep.fit_transform(X_train)
-    X_val = prep.fit_transform(X_val)
+    X_train = preprocessing(X_train)
+    X_val = preprocessing(X_val)
 
     y_train = torch.tensor(y_train.to_numpy(), dtype=torch.float32).reshape(-1, 1)
     y_val = torch.tensor(y_val.to_numpy(), dtype=torch.float32).reshape(-1, 1)
@@ -244,3 +246,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+    

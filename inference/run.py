@@ -7,16 +7,21 @@ import time
 import numpy as np
 import pandas as pd
 import logging 
-import joblib
+import sys
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from sklearn.metrics import accuracy_score
+'''from sklearn.metrics import accuracy_score
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler'''
+
+sys.path.insert(1, os.getcwd())
+
+
+from training.train import IrisNetwork, TensorTransformer, preprocessing
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -30,7 +35,7 @@ torch.cuda.manual_seed(seed)
 logging.basicConfig(level=logging.INFO, 
                         format='%(asctime)s - %(levelname)s - %(message)s')
 
-class IrisNetwork(nn.Module):
+'''class IrisNetwork(nn.Module):
   def __init__(self, n_layers, sub):
     super().__init__()
     self.n_layers = n_layers
@@ -69,24 +74,28 @@ class TensorTransformer(BaseEstimator, TransformerMixin):
 prep = Pipeline([
     ('scaler', StandardScaler()),
     ('tensor', TensorTransformer())
-])
+])'''
 
 def load_file():
    try:
     with open('./model/batch_size.txt', 'r') as f:
        b = f.read()
        f.close
-    return b
+    return int(b)
    except FileNotFoundError:
-     print('No such file')
-
+    logging.info('No batch size file')
+    sys.exit(1)
+    
 def save_results(true, pred):
-   os.mkdir('./results')
+   if not os.path.isdir('results'):
+    os.mkdir('./results')
+   rpath = os.path.join(os.getcwd(),'results','results.csv')
    r = pd.DataFrame({
      'Actual': true,
      'Predicted': pred
    })
-   r.to_csv('./results/results.csv', index = False)
+   r.to_csv(rpath, index = False)
+   logging.info(f'Results saved in: {rpath}')
 
 def inference(model, batch, test):
   test_loader = DataLoader(test, batch_size = batch)
@@ -95,6 +104,8 @@ def inference(model, batch, test):
   test_acc = 0
   loss_fn = nn.CrossEntropyLoss()
   prediction = np.array([])
+  correct = 0
+  l = 0
   model.eval()
   s = time.time()
   logging.info(f'Running inference with {batch} batch size and {test.shape[0]} test size.')
@@ -107,47 +118,53 @@ def inference(model, batch, test):
           loss = loss_fn(out, y)
           test_loss += loss.item()
           pred = torch.argmax(out, 1).detach().numpy()
-          test_acc += accuracy_score(y, pred)
+          correct += (y.detach().numpy()==pred).sum().item()
+          l += batch.shape[0]
           prediction = np.concatenate((prediction,pred))
 
   e = time.time()
 
-  test_loss /= len(test_loader)
-  test_acc /= len(test_loader)
+  test_loss /= l
+  test_acc = correct/l
 
-  logging.info(f'Inference completed in {e-s} seconds.\nAccuracy score: {test_acc}.')
-  save_results(true, prediction)
+  logging.info(f"""Inference completed in {e-s} seconds.
+               Accuracy score: {test_acc}.""")
+  return true, prediction
 
 def main():
 
+    logging.info('Loading data')
     try: 
       X = pd.read_csv('./data_process/test.csv')
     except FileNotFoundError:
-       print('No data file')
-    
-    X = prep.fit_transform(X)
+       logging.info('No data file')
+       sys.exit(1)
+
+    X = preprocessing(X)
 
     try: 
       y = pd.read_csv('./data_process/ytest.csv')
     except FileNotFoundError:
-      print('No data file')
-    
+      logging.info('No data file')
+      sys.exit(1)
+
     y_test = torch.tensor(y.to_numpy(), dtype=torch.float32).reshape(-1, 1)
 
     testing = torch.cat((X,y_test), 1)
+
+    logging.info('Loading model and batch size')
 
     try:
       model = IrisNetwork(3,0)
       model = torch.load('./model/model.pt')
     except FileNotFoundError:
-      print('No model file')
+      logging.info('No model file')
+      sys.exit(1)
 
-    batch_size = int(load_file())
+    batch_size = load_file()
 
-    
-
-    inference(model, batch_size, testing)
-
+    true, prediction = inference(model, batch_size, testing)
+    save_results(true, prediction)
 
 if __name__ == "__main__":
     main()
