@@ -216,13 +216,15 @@ def main():
     try: 
       X = pd.read_csv('./data_process/train.csv')
     except FileNotFoundError:
-      logging.info('No data file')
+      logging.info('Error: No data file')
+      os.mkdir('./model')
       sys.exit(1)
 
     try: 
       y = pd.read_csv('./data_process/ytrain.csv')
     except FileNotFoundError:
-      logging.info('No data file')
+      logging.info('Error: No data file')
+      os.mkdir('./model')
       sys.exit(1)
     
     logging.info('Creating train and validation sets')
