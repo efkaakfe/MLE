@@ -13,11 +13,6 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-'''from sklearn.metrics import accuracy_score
-from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler'''
-
 sys.path.insert(1, os.getcwd())
 
 
@@ -35,47 +30,6 @@ torch.cuda.manual_seed(seed)
 logging.basicConfig(level=logging.INFO, 
                         format='%(asctime)s - %(levelname)s - %(message)s')
 
-'''class IrisNetwork(nn.Module):
-  def __init__(self, n_layers, sub):
-    super().__init__()
-    self.n_layers = n_layers
-    self.sub = sub
-    self.layers = []
-    self.activation = []
-    start = 4
-    out = 0
-    for i in range(1, self.n_layers+1):
-      out = start - self.sub
-      if i < n_layers:
-        self.layers.append(nn.Linear(start, out))
-        self.activation.append(nn.ReLU())
-        self.add_module(f"layer{i}", self.layers[-1])
-        self.add_module(f"act{i}", self.activation[-1])
-        start = out
-      else:
-        self.layers.append(nn.Linear(start, 3))
-        self.activation.append(nn.Softmax(dim = 1))
-        self.add_module(f"layer{i}", self.layers[-1])
-        self.add_module(f"act{i}", self.activation[-1])
-
-  def forward(self, x):
-    for i in range(0, self.n_layers):
-      x = self.layers[i](x)
-      x = self.activation[i](x)
-    return x
-
-class TensorTransformer(BaseEstimator, TransformerMixin):
-  def fit(self, X):
-    return self
-  def transform(self, X):
-    X_tensor = torch.tensor(X, dtype=torch.float32)
-    return X_tensor
-
-prep = Pipeline([
-    ('scaler', StandardScaler()),
-    ('tensor', TensorTransformer())
-])'''
-
 def load_file():
    try:
     with open('./model/batch_size.txt', 'r') as f:
@@ -83,7 +37,7 @@ def load_file():
        f.close
     return int(b)
    except FileNotFoundError:
-    logging.info('No batch size file')
+    logging.info('Error: No batch size file')
     sys.exit(1)
     
 def save_results(true, pred):
@@ -137,7 +91,7 @@ def main():
     try: 
       X = pd.read_csv('./data_process/test.csv')
     except FileNotFoundError:
-       logging.info('No data file')
+       logging.info('Error: No data file')
        sys.exit(1)
 
     X = preprocessing(X)
@@ -145,7 +99,7 @@ def main():
     try: 
       y = pd.read_csv('./data_process/ytest.csv')
     except FileNotFoundError:
-      logging.info('No data file')
+      logging.info('Error: No data file')
       sys.exit(1)
 
     y_test = torch.tensor(y.to_numpy(), dtype=torch.float32).reshape(-1, 1)
@@ -158,7 +112,7 @@ def main():
       model = IrisNetwork(3,0)
       model = torch.load('./model/model.pt')
     except FileNotFoundError:
-      logging.info('No model file')
+      logging.info('Error: No model file')
       sys.exit(1)
 
     batch_size = load_file()
