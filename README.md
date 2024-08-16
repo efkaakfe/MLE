@@ -1,4 +1,4 @@
-# Machine Learning Engineering project
+# Machine Learning Enginnering project
 The aim of the project is to train and test neural network for multiclass classification using Docker containers. For this purpose, Pytorch was used as the main tool for building network.
 
 ## Project structure:
